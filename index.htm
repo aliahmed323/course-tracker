@@ -283,48 +283,46 @@ async function saveActiveSubject() { if (!userDocRef) return; try { await userDo
 async function saveExamDateAndDays(newD, newTD) { if (!userDocRef) return; examDate = newD; totalStudyDays = newTD; try { await userDocRef.update({ examDate, totalStudyDays }); console.log("ExDate svd."); } catch (e) { console.error("Err sv ExDate:", e); } }
 
 // --- Calculation Functions (No Change) ---
-// Checks if 'notes' checkbox is checked
 function isLectureComplete(rec){ return !!rec?.notes; }
-// Calculates global statistics (progress bars, remaining counts, done hours)
 function computeGlobal(subName, subData){
-    let t = { l: 0, w: 0, dl: 0, dw: 0, sl: 0, sw: 0, v: 0, n: 0, dh: 0 }; // Initialize counters (dh = doneHours)
-    if(!subData || !subData.doctors) return {...t, al:0, aw:0, rl:0, rw:0, p:0, bp:0, vp:0, np:0, doneHours:0}; // Return zeroed if no data
+    let t = { l: 0, w: 0, dl: 0, dw: 0, sl: 0, sw: 0, v: 0, n: 0, dh: 0 };
+    if(!subData || !subData.doctors) return {...t, al:0, aw:0, rl:0, rw:0, p:0, bp:0, vp:0, np:0, doneHours:0};
 
     Object.entries(subData.doctors).forEach(([dr, ls]) => {
-        if (!Array.isArray(ls)) return; // Skip if doctor has no lectures
+        if (!Array.isArray(ls)) return;
         ls.forEach(l => {
-            if (!l || typeof l !== 'object') return; // Skip invalid lecture data
-            const k = `${subName}||${l.chapter}||${l.title}`; // Unique key for state
-            const r = state[k] || { snoozed: !1 }; // Get state record, default snoozed to false
+            if (!l || typeof l !== 'object') return;
+            const k = `${subName}||${l.chapter}||${l.title}`;
+            const r = state[k] || { snoozed: !1 };
 
-            t.l++; // Total lectures
-            t.w += (l.weight || 0); // Total weight (use 0 if undefined)
+            t.l++;
+            t.w += (l.weight || 0);
 
-            if(r.video) t.v++; // Count videos watched
-            if(r.notes) t.n++; // Count notes done
+            if(r.video) t.v++;
+            if(r.notes) t.n++;
 
             if(r.snoozed){
-                t.sl++; // Snoozed lectures count
-                t.sw += (l.weight || 0); // Snoozed weight
+                t.sl++;
+                t.sw += (l.weight || 0);
             } else {
-                // Only count towards completion if NOT snoozed
+                // Hour calculation depends on completion (notes check) AND video checkbox state
                 if(isLectureComplete(r)){ // Check if notes are done
-                    t.dl++; // Done lectures count
-                    t.dw += (l.weight || 0); // Done weight
-                    if(r.videoDuration) { // If video duration exists for this completed lecture
-                        t.dh += r.videoDuration; // Add to total done hours
+                    t.dl++;
+                    t.dw += (l.weight || 0);
+                    // Add hours ONLY if lecture is complete AND video is checked AND duration exists
+                    if(r.video && r.videoDuration) {
+                        t.dh += r.videoDuration;
                     }
                 }
             }
         });
     });
 
-    const al = t.l - t.sl; // Active lectures (Total - Snoozed)
-    const aw = t.w - t.sw; // Active weight (Total - Snoozed)
-    const p = al > 0 ? (t.dl / al) * 100 : 0; // Percentage based on count
-    const bp = aw > 0 ? (t.dw / aw) * 100 : 0; // Percentage based on weight (Blueprint)
+    const al = t.l - t.sl;
+    const aw = t.w - t.sw;
+    const p = al > 0 ? (t.dl / al) * 100 : 0;
+    const bp = aw > 0 ? (t.dw / aw) * 100 : 0;
 
-    // Return all calculated values
     return {
         ...t,
         activeLectures: al,
@@ -336,7 +334,7 @@ function computeGlobal(subName, subData){
         videoPct: al > 0 ? Math.round(t.v / al * 100) : 0,
         notesPct: al > 0 ? Math.round(t.n / al * 100) : 0,
         snoozedLectures: t.sl,
-        doneHours: t.dh // Include total done hours
+        doneHours: t.dh
     };
 }
 
@@ -382,7 +380,7 @@ function render(subName, subData, searchTerm = "") {
                         totalWeight: chW[cn] || 0,
                         lectureCount: 0,
                         lecturesRemaining: 0,
-                        hoursDone: 0
+                        hoursDone: 0 // Reset hoursDone for each chapter calculation
                     };
                 }
                 chapters[cn].lectures.push({ ...l, doctor: dr });
@@ -390,12 +388,11 @@ function render(subName, subData, searchTerm = "") {
                 const rec = state[k] || { snoozed: !1 };
                 if (!rec.snoozed) {
                     chapters[cn].lectureCount++;
-                    // Use isLectureComplete to check if notes are done
                     if (!isLectureComplete(rec)) {
                         chapters[cn].lecturesRemaining++;
                     }
-                    // Add videoDuration only if the lecture is complete (notes checked)
-                    if (isLectureComplete(rec) && rec.videoDuration) {
+                    // Add hoursDone based on completion AND video check AND duration existence
+                    if (isLectureComplete(rec) && rec.video && rec.videoDuration) {
                         chapters[cn].hoursDone += rec.videoDuration;
                     }
                 }
@@ -409,7 +406,7 @@ function render(subName, subData, searchTerm = "") {
         stats: {
             count: d.lectureCount,
             remaining: d.lecturesRemaining,
-            hoursDone: d.hoursDone
+            hoursDone: d.hoursDone // Pass calculated hoursDone
         }
     }));
     if (isSorted) { chA.sort((a, b) => b.totalWeight - a.totalWeight); }
@@ -449,7 +446,7 @@ function render(subName, subData, searchTerm = "") {
         if (hasVisibleLectures) {
             const chapterBlueprintPct = chapterActiveWeight > 0 ? Math.round((chapterCompletedWeight / chapterActiveWeight) * 100) : 0;
             const chapterHoursTotal = subData.chapterHours?.[ch.name] || 0;
-            // Calculate remaining hours based on hoursDone calculated earlier
+            // Use the calculated ch.stats.hoursDone
             const chapterHoursRemaining = Math.max(0, chapterHoursTotal - ch.stats.hoursDone);
             const card = document.createElement('section');
             card.className = "card";
@@ -503,65 +500,60 @@ function render(subName, subData, searchTerm = "") {
     }
 }
 
-
 /*
 =============================================================================
-=== ✅ MODIFIED: updateEntry Function ===
-1.  In 'video' action: Sets `requiresPlanUpdate = true` IF the lecture is already complete (notes checked).
-2.  In 'notes' action: Sets `requiresPlanUpdate = true` always.
-3.  This ensures recalculation happens whenever video state changes *for a completed lecture*, or when completion state itself changes.
+=== ✅ REVISED LOGIC: updateEntry Function ===
+1.  Video Action: Sets requiresPlanUpdate = true ONLY IF `isLectureComplete(rec)` is true AFTER the video state change.
+2.  Notes Action: Sets requiresPlanUpdate = true ALWAYS.
 =============================================================================
 */
 async function updateEntry(subName, lec, rowEl, action){
     const k=`${subName}||${lec.chapter}||${lec.title}`;
     const rec=state[k]||{snoozed:!1, starred: !1, videoDuration: null};
     let requiresPlanUpdate = false;
-    // Store the completion status *before* any changes are made
-    const wasCompleteBeforeChange = isLectureComplete(rec);
+    // No need for wasCompleteBeforeChange with this logic
 
     // --- 1. Logic Block ---
     if(action==='video'){
         const isChecking = rowEl.querySelector('[data-action=video]').checked;
         rec.video = isChecking; // Update video state first
 
-        // Prompt logic (only on first check)
+        // Prompt logic (only on first check or if duration is missing)
         if (isChecking && (rec.videoDuration === null || rec.videoDuration === undefined)) {
             const durationInput = prompt(`كم ساعة استغرق فيديو "${lec.title}"؟`, "");
             if (durationInput !== null) { // Not cancelled
                 const duration = parseFloat(durationInput);
                 if (!isNaN(duration) && duration > 0) {
                     rec.videoDuration = duration;
-                    // If duration is entered successfully AND the lecture was already complete, trigger update
-                    if (wasCompleteBeforeChange) {
+                    // Check if lecture is complete *after* adding duration
+                    if (isLectureComplete(rec)) { // Depends only on rec.notes
                          requiresPlanUpdate = true;
                     }
                 } else if (durationInput !== "") { // Invalid input
                     alert("أدخل رقم صحيح (مثل 1.5).");
-                    // Revert UI and state if input invalid
-                    rowEl.querySelector('[data-action=video]').checked = false;
-                    rec.video = false;
+                    rowEl.querySelector('[data-action=video]').checked = false; // Revert UI
+                    rec.video = false; // Revert state
+                } else { // Empty input treated as invalid
+                     alert("أدخل رقم صحيح (مثل 1.5).");
+                    rowEl.querySelector('[data-action=video]').checked = false; // Revert UI
+                    rec.video = false; // Revert state
                 }
             } else { // User cancelled prompt
-                // Revert UI and state if prompt cancelled
-                rowEl.querySelector('[data-action=video]').checked = false;
-                rec.video = false;
+                rowEl.querySelector('[data-action=video]').checked = false; // Revert UI
+                rec.video = false; // Revert state
             }
         } else {
-             // === THIS IS THE FIX ===
-             // If duration already exists, trigger update ONLY IF the lecture was considered complete before this change.
-             // Toggling video affects 'doneHours' only for completed lectures.
-             if (wasCompleteBeforeChange) {
-                 requiresPlanUpdate = true;
+             // Duration already exists. Check if lecture is complete *now*
+             if (isLectureComplete(rec)) { // Depends only on rec.notes
+                 requiresPlanUpdate = true; // Trigger update if notes are checked
              }
-             // =======================
         }
     }
     else if(action==='notes'){
+        // Update notes state first
         rec.notes=rowEl.querySelector('[data-action=notes]').checked;
-        // === THIS IS THE FIX ===
-        // Always trigger update when notes change, as this defines completion *and* potentially adds/removes videoDuration from calculation.
+        // Always trigger update when notes change, as this defines completion
         requiresPlanUpdate=true;
-        // =======================
     }
     else if(action==='snooze'){
         rec.snoozed=!rec.snoozed;
@@ -575,20 +567,19 @@ async function updateEntry(subName, lec, rowEl, action){
             starBtn.classList.toggle('active', rec.starred);
             starBtn.textContent = rec.starred ? '⭐' : '☆';
         }
-        // Starring doesn't affect plan, so requiresPlanUpdate remains false
+        // Starring doesn't affect plan
     }
 
     // --- 2. Save Block ---
     state[k]=rec;
-    // Save progress for *all* actions to ensure state consistency
     await saveProgress();
 
     // --- 3. UI Update Block (for non-star actions) ---
     // Update row colors (done, partial, snoozed) based on the *new* state
     if(action !== 'star') {
         rowEl.classList.remove('done','partial','snoozed');
-        // Check completion status *after* potential changes (e.g., notes checked)
-        if(isLectureComplete(rec)) rowEl.classList.add('done');
+        // Check completion status *after* potential changes (e.g., notes checked/unchecked)
+        if(isLectureComplete(rec)) rowEl.classList.add('done'); // isLectureComplete depends only on rec.notes
         else if(rec.video||rec.notes) rowEl.classList.add('partial');
         if(rec.snoozed) rowEl.classList.add('snoozed');
     }
@@ -621,7 +612,7 @@ function updateDynamicPlan() {
         return
     };
 
-    const g = computeGlobal(subName,subData); // Recalculate global stats including doneHours
+    const g = computeGlobal(subName,subData);
     const daysRem=getDaysRemaining();
     const totalDays=totalStudyDays;
 
@@ -639,7 +630,6 @@ function updateDynamicPlan() {
         const reqL=(g.remainingLectures/daysRem).toFixed(1);
         planLecturesPerDay.textContent=reqL;
         const totalHours = subData.totalHours || 0;
-        // Use the updated g.doneHours from computeGlobal
         const remainingEstimatedHours = Math.max(0, totalHours - g.doneHours);
         if(planHoursPerDay && totalHours > 0){
             const reqH=(remainingEstimatedHours/daysRem).toFixed(1);
