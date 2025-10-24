@@ -22,6 +22,9 @@
   header{ position:fixed; top:0; right:0; left:0; z-index:50; background:rgba(15,23,42,.85); backdrop-filter:blur(8px); border-bottom:1px solid #1e293b; padding: 12px 0; height: 80px; }
   .header-container { max-width:1200px; margin:auto; padding:0 16px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
   h1{ margin:0; font-size: 22px; white-space: nowrap; }
+  /* Style for the added "مرحباً" */
+  .welcome-message { color: var(--warn); font-weight: bold; margin-right: 10px; font-size: 16px; }
+
   .container{max-width:1200px; margin:auto; padding:16px;}
   .subject-selector-container { display: flex; gap: 8px; align-items: center; flex-grow: 1; max-width: 500px; }
   .subject-selector-container select { flex-grow: 1; padding: 8px 12px; font-size: 14px; }
@@ -145,7 +148,8 @@
   <div class="header-container">
     <div style="display: flex; align-items: center; gap: 16px;">
         <h1 id="headerTitle">متابعة كورسات</h1>
-    </div>
+        <span class="welcome-message">مرحباً</span>
+        </div>
     <div id="clockDateContainer">
         <span id="liveDate"></span>
         <span id="liveClock"></span>
@@ -156,7 +160,6 @@
     </div>
   </div>
 </header>
-
 <main class="container" id="mainAppContent">
   <div class="subject-selector-container"> <select id="subjectSelector"></select> <button id="addSubjectBtn" class="warn">+</button> </div>
 
@@ -278,7 +281,7 @@ function getDefaultData() {
 async function loadDataFromFirestore() { if (!userDocRef) return; console.log("Ld F:", userId); try { const dS = await userDocRef.get(); if (dS.exists) { const d = dS.data(); appData = d.appData || getDefaultData(); state = d.state || {}; const sK = Object.keys(appData); activeSubjectName = (d.activeSubjectName && appData[d.activeSubjectName]) ? d.activeSubjectName : (sK.length > 0 ? sK[0] : null); examDate = d.examDate || ""; totalStudyDays = d.totalStudyDays || 0; console.log("Ld ok."); } else { console.log("No data, default..."); appData = getDefaultData(); state = {}; activeSubjectName = Object.keys(appData)[0]; examDate = ""; totalStudyDays = 0; await saveAllDataToFirestore(); console.log("Default saved."); } } catch (e) { console.error("Err Ld:", e); appData = getDefaultData(); state = {}; activeSubjectName = Object.keys(appData)[0]; } }
 async function saveAllDataToFirestore() { if (!userDocRef) return; console.log("Sv All..."); try { await userDocRef.set({ appData, state, activeSubjectName, examDate, totalStudyDays }, { merge: true }); console.log("All svd."); } catch (e) { console.error("Err sv all:", e); } }
 async function saveAppData() { if (!userDocRef) return; try { await userDocRef.update({ appData }); console.log("AppD svd."); } catch (e) { console.error("Err sv AppD:", e); } }
-async function saveProgress() { if (!userDocRef) return; try { await userDocRef.update({ state }); console.log("Prog svd."); } catch (e) { console.error("Err sv Prog:", e); } } // Added log
+async function saveProgress() { if (!userDocRef) return; try { await userDocRef.update({ state }); console.log("Prog svd."); } catch (e) { console.error("Err sv Prog:", e); } }
 async function saveActiveSubject() { if (!userDocRef) return; try { await userDocRef.update({ activeSubjectName }); console.log("ActSubj svd."); } catch (e) { console.error("Err sv ActSubj:", e); } }
 async function saveExamDateAndDays(newD, newTD) { if (!userDocRef) return; examDate = newD; totalStudyDays = newTD; try { await userDocRef.update({ examDate, totalStudyDays }); console.log("ExDate svd."); } catch (e) { console.error("Err sv ExDate:", e); } }
 
@@ -322,7 +325,6 @@ function computeGlobal(subName, subData){
     const p = al > 0 ? (t.dl / al) * 100 : 0;
     const bp = aw > 0 ? (t.dw / aw) * 100 : 0;
 
-    // console.log("Computed Global:", { ...t, doneHours: t.dh }); // DEBUG LOG
     return {
         ...t,
         activeLectures: al,
@@ -380,7 +382,7 @@ function render(subName, subData, searchTerm = "") {
                         totalWeight: chW[cn] || 0,
                         lectureCount: 0,
                         lecturesRemaining: 0,
-                        hoursDone: 0
+                        hoursDone: 0 // Reset hoursDone for each chapter calculation
                     };
                 }
                 chapters[cn].lectures.push({ ...l, doctor: dr });
@@ -406,7 +408,7 @@ function render(subName, subData, searchTerm = "") {
         stats: {
             count: d.lectureCount,
             remaining: d.lecturesRemaining,
-            hoursDone: d.hoursDone
+            hoursDone: d.hoursDone // Pass calculated hoursDone
         }
     }));
     if (isSorted) { chA.sort((a, b) => b.totalWeight - a.totalWeight); }
@@ -446,6 +448,7 @@ function render(subName, subData, searchTerm = "") {
         if (hasVisibleLectures) {
             const chapterBlueprintPct = chapterActiveWeight > 0 ? Math.round((chapterCompletedWeight / chapterActiveWeight) * 100) : 0;
             const chapterHoursTotal = subData.chapterHours?.[ch.name] || 0;
+            // Use the calculated ch.stats.hoursDone
             const chapterHoursRemaining = Math.max(0, chapterHoursTotal - ch.stats.hoursDone);
             const card = document.createElement('section');
             card.className = "card";
@@ -501,22 +504,25 @@ function render(subName, subData, searchTerm = "") {
 
 /*
 =============================================================================
-=== ✅ FINAL REVISED LOGIC: updateEntry Function ===
-1.  Video Action: Ask for duration if missing. Set `requiresPlanUpdate = true` ONLY IF notes are currently checked (`isLectureComplete(rec)` is true).
+=== ✅ FINAL REVISED LOGIC v2: updateEntry Function ===
+1.  Video Action: Ask for duration if missing. Set `requiresPlanUpdate = true` ONLY IF notes *are currently checked* (`rec.notes` is true after potential update).
 2.  Notes Action: Always set `requiresPlanUpdate = true`.
 3.  Snooze Action: Always set `requiresPlanUpdate = true`.
-4.  Star Action: No plan update.
 =============================================================================
 */
 async function updateEntry(subName, lec, rowEl, action){
     const k = `${subName}||${lec.chapter}||${lec.title}`;
     const rec = state[k] || {snoozed:!1, starred: !1, videoDuration: null};
     let requiresPlanUpdate = false; // Assume no update needed initially
+    let shouldSave = true; // Assume we should save unless prompt fails/cancels
+
+    console.log(`Action: ${action}, Initial State:`, JSON.parse(JSON.stringify(rec))); // Deeper log
 
     // --- 1. Perform Action & Update State ---
     if(action === 'video'){
         const isChecking = rowEl.querySelector('[data-action=video]').checked;
-        rec.video = isChecking; // Update video state first
+        // Temporarily store the intended state change
+        const intendedVideoState = isChecking;
 
         // Prompt logic (only on first check or if duration is missing)
         if (isChecking && (rec.videoDuration === null || rec.videoDuration === undefined)) {
@@ -525,38 +531,38 @@ async function updateEntry(subName, lec, rowEl, action){
                 const duration = parseFloat(durationInput);
                 if (!isNaN(duration) && duration > 0) {
                     rec.videoDuration = duration;
-                    // Check if lecture is complete NOW (based on notes)
-                    if (isLectureComplete(rec)) { // isLectureComplete depends only on rec.notes
+                    rec.video = intendedVideoState; // Apply state change only if duration is valid
+                    // Check if lecture is complete NOW (based on notes state)
+                    if (rec.notes) { // Check notes state directly
                          requiresPlanUpdate = true; // Duration added AND lecture is complete
                     }
-                } else { // Invalid or empty input (treat empty as invalid)
+                } else { // Invalid or empty input
                     alert("أدخل رقم صحيح (مثل 1.5).");
-                    rowEl.querySelector('[data-action=video]').checked = false; // Revert UI
-                    rec.video = false; // Revert state change
-                    requiresPlanUpdate = false; // Ensure no update happens
+                    rowEl.querySelector('[data-action=video]').checked = rec.video; // Revert UI to previous state
+                    shouldSave = false; // Don't save invalid state change
+                    requiresPlanUpdate = false;
                 }
             } else { // User cancelled prompt
-                rowEl.querySelector('[data-action=video]').checked = false; // Revert UI
-                rec.video = false; // Revert state change
-                requiresPlanUpdate = false; // Ensure no update happens
+                rowEl.querySelector('[data-action=video]').checked = rec.video; // Revert UI to previous state
+                shouldSave = false; // Don't save cancelled state change
+                requiresPlanUpdate = false;
             }
         } else {
-             // Duration already exists. Check if lecture is complete NOW (based on notes)
-             if (isLectureComplete(rec)) { // isLectureComplete depends only on rec.notes
+             // Duration already exists or unchecking video. Apply state change.
+             rec.video = intendedVideoState;
+             // Check if lecture is complete NOW (based on notes state)
+             if (rec.notes) { // Check notes state directly
                  requiresPlanUpdate = true; // Toggle video for a complete lecture affects hours
              }
         }
     }
     else if(action === 'notes'){
-        // Update notes state first
         rec.notes = rowEl.querySelector('[data-action=notes]').checked;
-        // Always trigger update when notes change, as this defines completion and affects hour calculation
-        requiresPlanUpdate = true;
+        requiresPlanUpdate = true; // Always update when notes change
     }
     else if(action === 'snooze'){
         rec.snoozed = !rec.snoozed;
-        // Always trigger update when snooze changes
-        requiresPlanUpdate = true;
+        requiresPlanUpdate = true; // Always update when snooze changes
     }
     else if(action === 'star'){
         rec.starred = !rec.starred;
@@ -569,12 +575,17 @@ async function updateEntry(subName, lec, rowEl, action){
     }
 
     // --- 2. Save Block ---
-    state[k] = rec;
-    // Save progress after state is updated
-    await saveProgress();
+    if (shouldSave) {
+        state[k] = rec;
+        await saveProgress(); // Save only if state change is valid
+        console.log(`Saved State:`, JSON.parse(JSON.stringify(rec))); // Log saved state
+    } else {
+         console.log(`Save skipped for action: ${action}`);
+    }
+
 
     // --- 3. UI Update Block (Row Appearance) ---
-    // Update row colors based on the *new* state, except for star action
+    // Update row colors based on the final state, except for star action
     if(action !== 'star') {
         rowEl.classList.remove('done','partial','snoozed');
         if(isLectureComplete(rec)) rowEl.classList.add('done'); // Depends only on rec.notes
@@ -583,19 +594,15 @@ async function updateEntry(subName, lec, rowEl, action){
     }
 
     // --- 4. Plan Update Block (Re-render if necessary) ---
-    if(requiresPlanUpdate){
-        console.log("Requires Plan Update triggered by action:", action, " New state:", rec); // Detailed log
+    if(requiresPlanUpdate && shouldSave){ // Only update if needed AND save occurred
+        console.log("--> Triggering Re-render & Plan Update");
         const actSub = activeSubjectName;
-        // Re-render the whole list to update chapter stats AND global stats correctly
         render(actSub, appData[actSub], searchInput ? searchInput.value : "");
-        // Update the global planner boxes
         updateDynamicPlan();
     } else {
-         console.log("Requires Plan Update NOT triggered by action:", action, " New state:", rec); // Detailed log
+         console.log("--> Re-render & Plan Update SKIPPED");
     }
 }
-
-
 
 // --- Planning Functions (No Change) ---
 function getDaysRemaining(targetDate = examDate) { if (!targetDate) return null; const today=new Date();today.setHours(0,0,0,0);const examD=new Date(targetDate);const diffT=examD.getTime()-today.getTime();const diffD=Math.ceil(diffT/(1e3*60*60*24));return diffD; }
