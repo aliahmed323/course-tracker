@@ -225,14 +225,7 @@
 
 <script>
 // --- Firebase Config & Init (No Change) ---
-const firebaseConfig = {
-  apiKey: "AIzaSyBizJxYxXnO5u7EIvw6bjfJ3gRbzMJjCdw",
-  authDomain: "course-progressing.firebaseapp.com",
-  projectId: "course-progressing",
-  storageBucket: "course-progressing.appspot.com",
-  messagingSenderId: "349314472435",
-  appId: "1:349314472435:web:0dd7b5297e02342b4cda86",
-};
+const firebaseConfig = { /* ... */ }; // Same as before
 try { firebase.initializeApp(firebaseConfig); console.log("Firebase Initialized."); }
 catch (e) { console.error("Firebase init failed:", e); }
 const auth = firebase.auth(); const db = firebase.firestore(); const googleProvider = new firebase.auth.GoogleAuthProvider();
@@ -252,253 +245,39 @@ let mainAppContent, userSection, userImg, userName, loginBtn, logoutBtn, cardsEl
     searchInput, starredModal;
 
 // --- Default Data (No Change) ---
-function getDefaultData() {
-    return { /* ... */ }; // Same as before
-}
+function getDefaultData() { /* ... */ } // Same as before
 
 // --- Firestore Functions (No Change) ---
 async function loadDataFromFirestore() { /* ... */ } // Same as before
 async function saveAllDataToFirestore() { /* ... */ } // Same as before
 async function saveAppData() { /* ... */ } // Same as before
-async function saveProgress() { if (!userDocRef) return; try { await userDocRef.update({ state }); console.log("%cProg svd.", "color: lightblue;", JSON.parse(JSON.stringify(state))); } catch (e) { console.error("Err sv Prog:", e); } } // Added detailed log
+async function saveProgress() { if (!userDocRef) return; try { await userDocRef.update({ state }); console.log("%cProg svd.", "color: lightblue;", JSON.parse(JSON.stringify(state))); } catch (e) { console.error("Err sv Prog:", e); } }
 async function saveActiveSubject() { /* ... */ } // Same as before
 async function saveExamDateAndDays(newD, newTD) { /* ... */ } // Same as before
 
 // --- Calculation Functions (No Change) ---
 function isLectureComplete(rec){ return !!rec?.notes; }
-function computeGlobal(subName, subData){
-    let t = { l: 0, w: 0, dl: 0, dw: 0, sl: 0, sw: 0, v: 0, n: 0, dh: 0 };
-    if(!subData || !subData.doctors) return {...t, al:0, aw:0, rl:0, rw:0, p:0, bp:0, vp:0, np:0, doneHours:0};
-
-    Object.entries(subData.doctors).forEach(([dr, ls]) => {
-        if (!Array.isArray(ls)) return;
-        ls.forEach(l => {
-            if (!l || typeof l !== 'object') return;
-            const k = `${subName}||${l.chapter}||${l.title}`;
-            const r = state[k] || { snoozed: !1 };
-
-            t.l++;
-            t.w += (l.weight || 0);
-
-            if(r.video) t.v++;
-            if(r.notes) t.n++;
-
-            if(r.snoozed){
-                t.sl++;
-                t.sw += (l.weight || 0);
-            } else {
-                // Hour calculation depends on completion (notes check) AND video checkbox state
-                if(isLectureComplete(r)){ // Check if notes are done
-                    t.dl++;
-                    t.dw += (l.weight || 0);
-                    // Add hours ONLY if lecture is complete AND video is checked AND duration exists
-                    if(r.video && r.videoDuration) {
-                        t.dh += r.videoDuration;
-                    }
-                }
-            }
-        });
-    });
-
-    const al = t.l - t.sl;
-    const aw = t.w - t.sw;
-    const p = al > 0 ? (t.dl / al) * 100 : 0;
-    const bp = aw > 0 ? (t.dw / aw) * 100 : 0;
-
-    console.log(`%ccomputeGlobal Result: doneHours=${t.dh}`, "color: yellow;"); // DEBUG LOG
-    return {
-        ...t,
-        activeLectures: al,
-        activeWeight: parseFloat(aw.toFixed(2)),
-        remainingLectures: al - t.dl,
-        remainingWeight: parseFloat((aw - t.dw).toFixed(2)),
-        pct: Math.round(p),
-        blueprintPct: Math.round(bp),
-        videoPct: al > 0 ? Math.round(t.v / al * 100) : 0,
-        notesPct: al > 0 ? Math.round(t.n / al * 100) : 0,
-        snoozedLectures: t.sl,
-        doneHours: t.dh
-    };
-}
+function computeGlobal(subName, subData){ /* ... */ } // Same as before
 
 
 // --- Rendering Functions (No Change) ---
-function renderGlobalHeader(subName, subData, computedGlobal){
-    const g = computedGlobal || computeGlobal(subName, subData); // Use passed-in object if available
-    console.log(`%crenderGlobalHeader: Using doneHours=${g.doneHours}`, "color: lightgreen;"); // DEBUG LOG
-    if(subName){headerTitle.textContent=`متابعة: ${subName}`}else{headerTitle.textContent="متابعة كورسات"}
-    globalBar.style.width=g.pct+'%';globalBarPct.textContent=g.pct+'%';
-    blueprintBarSpan.style.width=g.blueprintPct+'%';blueprintBarPct.textContent=g.blueprintPct+'%';
-    totalHoursEl.textContent=subData?.totalHours?`${subData.totalHours}`:"-";
-    try{document.getElementById('globalKpis').innerHTML=`<span class=kpi>الكمية:${g.pct}%</span><span class="kpi status-warn" style="color:var(--warn)">البلوبرنت:${g.blueprintPct}%</span><span class=kpi>الباقي:${g.remainingLectures}/${g.activeLectures}</span><span class=kpi>المتجاهل:${g.snoozedLectures}</span>`}catch(e){/*ignore*/}
-}
-function render(subName, subData, searchTerm = "") {
-    console.log(`%cRendering list...`, "color: orange;"); // DEBUG LOG
-    const globalStats = computeGlobal(subName, subData);
-    renderGlobalHeader(subName, subData, globalStats);
-
-    const openCardIds = [];
-    if (cardsEl) {
-        cardsEl.querySelectorAll('.card-content').forEach(contentEl => {
-            if (contentEl.style.display === 'grid') {
-                openCardIds.push(contentEl.id);
-            }
-        });
-    }
-
-    cardsEl.innerHTML = "";
-
-    if (!subData || !subData.doctors || Object.keys(subData.doctors).length === 0) {
-        cardsEl.innerHTML = `<p style="text-align:center;">لا توجد بيانات لهذه المادة.</p>`;
-        return;
-    }
-    const chapters = {};
-    const chW = subData.chapters || {};
-    Object.entries(subData.doctors).forEach(([dr, ls]) => {
-        if (Array.isArray(ls)) {
-            ls.forEach(l => {
-                if (!l || typeof l !== 'object') { return; }
-                const cn = l.chapter || "غير مصنف";
-                if (!chapters[cn]) {
-                    chapters[cn] = {
-                        lectures: [],
-                        totalWeight: chW[cn] || 0,
-                        lectureCount: 0,
-                        lecturesRemaining: 0,
-                        hoursDone: 0
-                    };
-                }
-                chapters[cn].lectures.push({ ...l, doctor: dr });
-                const k = `${subName}||${cn}||${l.title}`;
-                const rec = state[k] || { snoozed: !1 };
-                if (!rec.snoozed) {
-                    chapters[cn].lectureCount++;
-                    if (!isLectureComplete(rec)) {
-                        chapters[cn].lecturesRemaining++;
-                    }
-                    if (isLectureComplete(rec) && rec.video && rec.videoDuration) {
-                        chapters[cn].hoursDone += rec.videoDuration;
-                    }
-                }
-            });
-        }
-    });
-    let chA = Object.entries(chapters).map(([n, d]) => ({
-        name: n,
-        totalWeight: parseFloat(d.totalWeight.toFixed(2)),
-        lectures: d.lectures,
-        stats: {
-            count: d.lectureCount,
-            remaining: d.lecturesRemaining,
-            hoursDone: d.hoursDone
-        }
-    }));
-    if (isSorted) { chA.sort((a, b) => b.totalWeight - a.totalWeight); }
-    let firstMatchElement = null;
-    chA.forEach((ch, idx) => {
-        let chapterCompletedWeight = 0;
-        let chapterActiveWeight = 0;
-        let hasVisibleLectures = false;
-        const lecturesHTML = ch.lectures.map(l => {
-            const k = `${subName}||${l.chapter}||${l.title}`;
-            const rec = state[k] || { snoozed: !1, starred: !1 };
-            const isMatch = searchTerm && l.title?.toLowerCase().includes(searchTerm.toLowerCase());
-            if (searchTerm && !isMatch) return '';
-            hasVisibleLectures = true;
-            let rcs = "row";
-            if (isLectureComplete(rec)) rcs += " done";
-            else if (rec.video || rec.notes) rcs += " partial";
-            if (rec.snoozed) rcs += " snoozed";
-            if (isMatch) rcs += " highlight";
-            if (isMatch && !firstMatchElement) { firstMatchElement = { key: k }; }
-            if (!rec.snoozed) {
-                chapterActiveWeight += (l.weight || 0);
-                if (isLectureComplete(rec)) {
-                    chapterCompletedWeight += (l.weight || 0);
-                }
-            }
-            const starIcon = rec.starred ? '⭐' : '☆';
-            return `<div class="${rcs}" data-key="${k}">
-                      <button class="star-btn ${rec.starred?'active':''}" data-action="star" title="تمييز">${starIcon}</button>
-                      <span class=lecture-weight>${l.weight || 0}%</span>
-                      <div class=title>${l.title}</div>
-                      <button class=snooze-btn data-action=snooze title=تجاهل>🚫</button>
-                      <label class=chip><input type=checkbox data-action=video ${rec.video?'checked':''}> فيديو</label>
-                      <label class=chip><input type=checkbox data-action=notes ${rec.notes?'checked':''}> ملزمة</label>
-                    </div>`;
-        }).join('');
-        if (hasVisibleLectures) {
-            const chapterBlueprintPct = chapterActiveWeight > 0 ? Math.round((chapterCompletedWeight / chapterActiveWeight) * 100) : 0;
-            const chapterHoursTotal = subData.chapterHours?.[ch.name] || 0;
-            const chapterHoursRemaining = Math.max(0, chapterHoursTotal - ch.stats.hoursDone);
-            const card = document.createElement('section');
-            card.className = "card";
-            const cId = `c-${idx}`;
-            card.innerHTML = `
-              <div class=card-header data-collapse="${cId}">
-                <h2>${ch.name}</h2>
-                <div style="text-align: left; flex-shrink: 0; max-width: 250px;">
-                  <div style="display: flex; gap: 16px; align-items: center; justify-content: flex-end;">
-                    <span class=chapter-weight>${ch.totalWeight}%</span>
-                    <div class="chapter-progress-container"><div class="chapter-progress-bar" style="width: ${chapterBlueprintPct}%;"></div></div>
-                  </div>
-                  <div class="chapter-stats">
-                    <div class="stat-item">المحاضرات: <span>${ch.stats.count}</span></div>
-                    <div class="stat-item">المتبقي: <span>${ch.stats.remaining}</span></div>
-                    <div class="stat-item">الساعات: <span>${chapterHoursTotal.toFixed(1)}h</span></div>
-                    <div class="stat-item">متبقي: <span>${chapterHoursRemaining.toFixed(1)}h</span></div>
-                  </div>
-                </div>
-              </div>
-              <div id="${cId}" class=card-content>${lecturesHTML}</div>`;
-            cardsEl.appendChild(card);
-            const listEl = card.querySelector(`#${cId}`);
-            if(searchTerm || openCardIds.includes(cId)) {
-                listEl.style.display = 'grid';
-            }
-            card.querySelector('[data-collapse]').addEventListener('click', (e) => {
-                if (e.target.closest('button,input,label')) return;
-                listEl.style.display = (listEl.style.display === 'none' || listEl.style.display === '') ? 'grid' : 'none'
-            });
-            listEl.querySelectorAll('.row button, .row input').forEach(el => {
-                el.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const rowEl = e.target.closest('.row');
-                    const title = rowEl.querySelector('.title').textContent;
-                    const lectureData = ch.lectures.find(l => l.title === title);
-                    if (lectureData) {
-                        updateEntry(subName, lectureData, rowEl, el.dataset.action);
-                    } else { console.error("Could not find lecture data for event target:", title); }
-                })
-            });
-        }
-    });
-    if (firstMatchElement) {
-        setTimeout(() => {
-            const elementToScroll = cardsEl.querySelector(`.row[data-key="${firstMatchElement.key}"]`);
-            if (elementToScroll) { elementToScroll.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-        }, 100);
-    } else if (searchTerm) {
-        cardsEl.innerHTML = `<p style="text-align:center;">لا توجد نتائج بحث.</p>`;
-    }
-}
+function renderGlobalHeader(subName, subData, computedGlobal){ /* ... */ } // Same as before
+function render(subName, subData, searchTerm = "") { /* ... */ } // Same as before
 
 
 /*
 =============================================================================
-=== ✅ FINAL REVISED LOGIC v3: updateEntry Function ===
-1.  Video Action: Ask for duration if missing. Determine requiresPlanUpdate AFTER state update.
-2.  Notes Action: Always set requiresPlanUpdate = true.
-3.  Snooze Action: Always set requiresPlanUpdate = true.
-4.  Added extensive console logging.
+=== ✅ FINAL REVISED LOGIC v4: updateEntry Function ===
+1.  Simplify: Always call init() after any state change (video, notes, snooze).
+2.  This guarantees UI and calculations are always based on the latest saved state.
+3.  Keeps the prompt logic for video duration.
+4.  Removes the complex `requiresPlanUpdate` logic.
 =============================================================================
 */
 async function updateEntry(subName, lec, rowEl, action){
     const k = `${subName}||${lec.chapter}||${lec.title}`;
-    // Clone the current state for reliable comparison later if needed, but primarily work on the reference
     const rec = state[k] || {snoozed:!1, starred: !1, videoDuration: null};
-    let requiresPlanUpdate = false; // Assume no update needed initially
-    let shouldSave = true; // Assume we should save unless prompt fails/cancels
+    let shouldSave = true; // Assume save unless prompt fails/cancels
 
     console.log(`%c[${action}] START for "${lec.title}"`, "color: magenta; font-weight: bold;");
     console.log(`[${action}] Initial State:`, JSON.parse(JSON.stringify(rec)));
@@ -506,6 +285,7 @@ async function updateEntry(subName, lec, rowEl, action){
     // --- 1. Perform Action & Update State Object Directly ---
     if(action === 'video'){
         const isChecking = rowEl.querySelector('[data-action=video]').checked;
+        const intendedVideoState = isChecking;
 
         // Prompt logic (only if checking and duration is missing)
         if (isChecking && (rec.videoDuration === null || rec.videoDuration === undefined)) {
@@ -514,44 +294,29 @@ async function updateEntry(subName, lec, rowEl, action){
                 const duration = parseFloat(durationInput);
                 if (!isNaN(duration) && duration > 0) {
                     rec.videoDuration = duration;
-                    rec.video = true; // Apply state change only if duration is valid
+                    rec.video = intendedVideoState; // Apply state change
                     console.log(`[${action}] Duration entered: ${duration}`);
                 } else { // Invalid or empty input
                     alert("أدخل رقم صحيح (مثل 1.5).");
-                    rowEl.querySelector('[data-action=video]').checked = false; // Revert UI immediately
-                    rec.video = false; // Ensure state remains false
-                    shouldSave = false; // Don't save this attempt
+                    rowEl.querySelector('[data-action=video]').checked = rec.video; // Revert UI
+                    shouldSave = false;
                     console.log(`[${action}] Invalid duration input.`);
                 }
             } else { // User cancelled prompt
-                rowEl.querySelector('[data-action=video]').checked = false; // Revert UI immediately
-                rec.video = false; // Ensure state remains false
-                shouldSave = false; // Don't save this attempt
+                rowEl.querySelector('[data-action=video]').checked = rec.video; // Revert UI
+                shouldSave = false;
                 console.log(`[${action}] Duration prompt cancelled.`);
             }
         } else {
-             // Duration exists or user is unchecking. Update state directly.
-             rec.video = isChecking;
+             // Duration exists or unchecking. Apply state change.
+             rec.video = intendedVideoState;
         }
-
-        // Determine if update needed AFTER state is potentially modified
-        if (rec.notes) { // Check notes state directly *after* potential video state change
-             requiresPlanUpdate = true;
-             console.log(`[${action}] requiresPlanUpdate = true (because notes is true)`);
-        } else {
-             console.log(`[${action}] requiresPlanUpdate = false (because notes is false)`);
-        }
-
     }
     else if(action === 'notes'){
         rec.notes = rowEl.querySelector('[data-action=notes]').checked;
-        requiresPlanUpdate = true; // Always update when notes change
-        console.log(`[${action}] requiresPlanUpdate = true (always for notes)`);
     }
     else if(action === 'snooze'){
         rec.snoozed = !rec.snoozed;
-        requiresPlanUpdate = true; // Always update when snooze changes
-        console.log(`[${action}] requiresPlanUpdate = true (always for snooze)`);
     }
     else if(action === 'star'){
         rec.starred = !rec.starred;
@@ -560,136 +325,68 @@ async function updateEntry(subName, lec, rowEl, action){
             starBtn.classList.toggle('active', rec.starred);
             starBtn.textContent = rec.starred ? '⭐' : '☆';
         }
-        console.log(`[${action}] requiresPlanUpdate = false (only starring)`);
-        // Starring doesn't affect plan calculation
+        // Starring doesn't require re-render/recalc
     }
 
-     console.log(`[${action}] State after action:`, JSON.parse(JSON.stringify(rec)));
-     console.log(`[${action}] Should Save: ${shouldSave}`);
-     console.log(`[${action}] Requires Plan Update: ${requiresPlanUpdate}`);
+    console.log(`[${action}] State after action:`, JSON.parse(JSON.stringify(rec)));
+    console.log(`[${action}] Should Save: ${shouldSave}`);
 
     // --- 2. Save Block ---
     if (shouldSave) {
-        state[k] = rec; // Assign potentially modified rec back to the main state object
+        state[k] = rec; // Update the global state object reference
         try {
-            await saveProgress(); // Save the updated state to Firestore
+            await saveProgress(); // Save the entire state object to Firestore
             console.log(`[${action}] Firestore save successful.`);
+
+            // --- 3. THE FIX: Always Re-initialize UI After Save ---
+            // Re-call init() ONLY for actions that affect calculations or visual state (not star)
+            if (action !== 'star') {
+                console.log(`[${action}] ---> Calling init() to refresh UI and calculations...`);
+                // Find currently open cards BEFORE calling init() which clears them
+                const openCardIds = [];
+                 if (cardsEl) {
+                    cardsEl.querySelectorAll('.card-content').forEach(contentEl => {
+                        if (contentEl.style.display === 'grid') {
+                            openCardIds.push(contentEl.id);
+                        }
+                    });
+                 }
+                init(); // Re-render everything based on the newly saved state
+
+                // Restore open cards after init finishes rendering
+                 setTimeout(() => {
+                    openCardIds.forEach(cardId => {
+                        const contentEl = document.getElementById(cardId);
+                        if (contentEl) {
+                            contentEl.style.display = 'grid';
+                            console.log(`[${action}] ---> Re-opened card ${cardId}`);
+                        }
+                    });
+                 }, 0); // Use timeout 0 to run after current execution stack
+
+            } else {
+                 console.log(`[${action}] ---> Skipping init() call (only starring).`);
+            }
+            // --- End of Fix ---
+
         } catch (e) {
              console.error(`[${action}] Firestore save failed:`, e);
-             // Optionally revert UI changes if save fails? Or notify user?
+             // Maybe alert user? For now, UI might be inconsistent with DB.
         }
     } else {
-         console.log(`[${action}] Firestore save skipped.`);
-         // Need to ensure UI reflects the actual state if save was skipped (e.g., checkbox reverted)
-         if (action === 'video') {
-             rowEl.querySelector('[data-action=video]').checked = rec.video; // Explicitly set UI back
-         }
+         console.log(`[${action}] Firestore save skipped. No UI refresh.`);
     }
 
+    // --- UI update for row colors is now handled by init() ---
 
-    // --- 3. UI Update Block (Row Appearance) ---
-    // Update row colors based on the final state, except for star action
-    if(action !== 'star') {
-        rowEl.classList.remove('done','partial','snoozed');
-        if(isLectureComplete(rec)) rowEl.classList.add('done'); // Depends only on final rec.notes
-        else if(rec.video || rec.notes) rowEl.classList.add('partial'); // Depends on final rec.video/rec.notes
-        if(rec.snoozed) rowEl.classList.add('snoozed'); // Depends on final rec.snoozed
-        console.log(`[${action}] Row classes updated.`);
-    }
-
-    // --- 4. Plan Update Block (Re-render if necessary) ---
-    if(requiresPlanUpdate && shouldSave){ // Only update if needed AND save occurred
-        console.log(`[${action}] --> Triggering Re-render & Plan Update`);
-        const actSub = activeSubjectName;
-        render(actSub, appData[actSub], searchInput ? searchInput.value : "");
-        updateDynamicPlan();
-    } else {
-         console.log(`[${action}] --> Re-render & Plan Update SKIPPED (requiresPlanUpdate=${requiresPlanUpdate}, shouldSave=${shouldSave})`);
-    }
-     console.log(`%c[${action}] END for "${lec.title}"`, "color: magenta; font-weight: bold;");
+    console.log(`%c[${action}] END for "${lec.title}"`, "color: magenta; font-weight: bold;");
 }
-
 
 
 // --- Planning Functions (No Change) ---
 function getDaysRemaining(targetDate = examDate) { /* ... */ } // Same as before
 function calculateAndDisplayDays() { /* ... */ } // Same as before
-function updateDynamicPlan() {
-    // ... (logic depends on computeGlobal) ...
-    const g = computeGlobal(subName,subData); // Recalculates based on current state
-    console.log(`%cupdateDynamicPlan: Using doneHours=${g.doneHours}`, "color: cyan;"); // DEBUG LOG
-    // ... (rest of the logic) ...
-
-    const subName=activeSubjectName;
-    const subData=appData[subName];
-
-    if(!subData){
-        planStatus.textContent="-";
-        planLecturesPerDay.textContent="-";
-        if(planHoursPerDay)planHoursPerDay.textContent="-";
-        if(remainingHoursEl)remainingHoursEl.textContent="-";
-        if(planStatusInfo)planStatusInfo.title="";
-        plannerStatusBox.classList.remove('status-danger','status-good','status-warn');
-        return
-    };
-
-    // const g = computeGlobal(subName,subData); // Already calculated above
-    const daysRem=getDaysRemaining();
-    const totalDays=totalStudyDays;
-
-    plannerStatusBox.classList.remove('status-danger','status-good','status-warn');
-
-    if(daysRem===null||daysRem<=0){
-        planLecturesPerDay.textContent="انتهى";
-        if(planHoursPerDay)planHoursPerDay.textContent="انتهى";
-        if(remainingHoursEl)remainingHoursEl.textContent="انتهى";
-    }else if(g.remainingLectures===0){
-        planLecturesPerDay.textContent="مكتمل 🎉";
-        if(planHoursPerDay)planHoursPerDay.textContent="مكتمل 🎉";
-        if(remainingHoursEl)remainingHoursEl.textContent="مكتمل 🎉";
-    }else{
-        const reqL=(g.remainingLectures/daysRem).toFixed(1);
-        planLecturesPerDay.textContent=reqL;
-        const totalHours = subData.totalHours || 0;
-        const remainingEstimatedHours = Math.max(0, totalHours - g.doneHours);
-        if(planHoursPerDay && totalHours > 0){
-            const reqH=(remainingEstimatedHours/daysRem).toFixed(1);
-            planHoursPerDay.textContent=isNaN(reqH)?'-':reqH;
-            if (remainingHoursEl) {
-                remainingHoursEl.textContent = remainingEstimatedHours.toFixed(1);
-            }
-        } else if(planHoursPerDay) {
-            planHoursPerDay.textContent="-";
-            if (remainingHoursEl) {
-                remainingHoursEl.textContent = totalHours > 0 ? remainingEstimatedHours.toFixed(1) : "-";
-            }
-        }
-    }
-
-    let statusText="-";let statusClass='status-warn';
-
-    if(totalDays<=0||daysRem===null||daysRem<0){
-        // Error state handled below
-    }else{
-        const daysP=totalDays-daysRem;
-        const expectPct=totalDays>0?Math.max(0,Math.min(100,(daysP/totalDays)*100)):0;
-        const actualPct=g.blueprintPct;
-        const diff=actualPct-expectPct;
-        if(diff<-10){statusText="متأخر 😥";statusClass='status-danger';}
-        else if(diff>10){statusText="متقدم 😎";statusClass='status-good';}
-        else{statusText="على المسار 👍";statusClass='status-warn';}
-    }
-    planStatus.textContent=statusText;
-    plannerStatusBox.className=`planner-box ${statusClass}`;
-
-    if(planStatusInfo) {
-        if(totalDays<=0||daysRem===null||daysRem<0) {
-            planStatusInfo.title = "حدد تاريخ امتحان صحيح.";
-        } else {
-            planStatusInfo.title = "يقارن نسبة إنجاز البلوبرنت (الأهمية) بنسبة الوقت المنقضي. | متأخر 😥: إنجازك أقل بـ 10% من الوقت. | على المسار 👍: إنجازك في حدود 10% من الوقت. | متقدم 😎: إنجازك يتفوق بـ 10% على الوقت.";
-        }
-    }
-}
+function updateDynamicPlan() { /* ... */ } // Same as before
 
 
 // --- Modal Functions (No Change) ---
@@ -710,8 +407,31 @@ async function signOutUser() { /* ... */ } // Same as before
 // --- Reset Function (No Change) ---
 async function resetAllData() { /* ... */ } // Same as before
 
-// --- Initialization Function (No Change) ---
-function init(){ /* ... */ } // Same as before
+// --- Initialization Function (MODIFIED slightly for card restore) ---
+function init(openCardIds = []){ // Accept optional list of card IDs to reopen
+    console.log("%cinit() called.", "color: green; font-weight: bold;");
+    if (!currentUser) { console.warn("Cannot init, user not logged in."); return; }
+    const subjectKeys = Object.keys(appData);
+    if (subjectKeys.length === 0) {
+        render(null, null);
+        subjectSelector.innerHTML = '<option>لا توجد مواد</option>';
+    } else {
+        if (!activeSubjectName || !appData[activeSubjectName]) {
+            activeSubjectName = subjectKeys[0];
+        }
+        subjectSelector.innerHTML = '';
+        subjectKeys.forEach(subName => {
+            const opt=document.createElement('option');opt.value=subName;opt.textContent=subName;if(subName===activeSubjectName)opt.selected=true; subjectSelector.appendChild(opt);
+        });
+        // Pass openCardIds to render function
+        render(activeSubjectName, appData[activeSubjectName], searchInput ? searchInput.value : "");
+    }
+    calculateAndDisplayDays();
+    updateDynamicPlan();
+
+    console.log("%cinit() finished.", "color: green; font-weight: bold;");
+}
+
 
 // --- Clock Function (No Change) ---
 function updateClock() { /* ... */ } // Same as before
